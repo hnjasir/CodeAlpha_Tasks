@@ -1,3 +1,9 @@
+## 💻 Source Code
+
+<details>
+<summary><b>Click to expand and view the full Python sniffer code</b></summary>
+
+```python
 import socket
 import struct
 import textwrap
