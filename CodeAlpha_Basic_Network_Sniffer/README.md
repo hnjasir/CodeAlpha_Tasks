@@ -1,152 +1,305 @@
-## 💻 Source Code
+# Codealpha_Basic-Network-sniffer
+<div align="center">
 
-<details>
-<summary><b>Click to expand and view the full Python sniffer code</b></summary>
+# 🔍 Network Packet Sniffer
 
-```python
-import socket
-import struct
-import textwrap
+**A human-friendly, real-time network packet analyzer built with Python & Scapy**
 
-def get_mac_addr(bytes_addr):
-    """Format binary MAC address into readable string (XX:XX:XX:XX:XX:XX)."""
-    bytes_str = map('{:02x}'.format, bytes_addr)
-    return ':'.join(bytes_str).upper()
+![Python](https://img.shields.io/badge/Python-3.7%2B-blue?style=for-the-badge&logo=python&logoColor=white)
+![Scapy](https://img.shields.io/badge/Scapy-2.5%2B-green?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
+![Internship](https://img.shields.io/badge/CodeAlpha-Task%201-orange?style=for-the-badge)
 
-def ethernet_frame(data):
-    """Unpack Ethernet Frame (Layer 2)."""
-    dest_mac, src_mac, proto = struct.unpack('! 6s 6s H', data[:14])
-    return get_mac_addr(dest_mac), get_mac_addr(src_mac), socket.htons(proto), data[14:]
+*Built as Task 1 of the CodeAlpha Cybersecurity Internship*
 
-def format_ipv4(addr):
-    """Format binary IP address into dot-decimal string."""
-    return '.'.join(map(str, addr))
+</div>
 
-def ipv4_packet(data):
-    """Unpack IPv4 Packet (Layer 3)."""
-    version_header_length = data[0]
-    version = version_header_length >> 4
-    header_length = (version_header_length & 15) * 4
-    ttl, proto, src, target = struct.unpack('! 8x B B x 4s 4s', data[:20])
-    return version, header_length, ttl, proto, format_ipv4(src), format_ipv4(target), data[header_length:]
+---
 
-def icmp_packet(data):
-    """Unpack ICMP Packet."""
-    icmp_type, code, checksum = struct.unpack('! B B H', data[:4])
-    return icmp_type, code, checksum, data[4:]
+## 📌 Overview
 
-def tcp_segment(data):
-    """Unpack TCP Segment (Layer 4)."""
-    (src_port, dest_port, sequence, acknowledgment, offset_reserved_flags) = struct.unpack('! H H L L H', data[:14])
-    offset = (offset_reserved_flags >> 12) * 4
-    flag_urg = (offset_reserved_flags & 32) >> 5
-    flag_ack = (offset_reserved_flags & 16) >> 4
-    flag_psh = (offset_reserved_flags & 8) >> 3
-    flag_rst = (offset_reserved_flags & 4) >> 2
-    flag_syn = (offset_reserved_flags & 2) >> 1
-    flag_fin = offset_reserved_flags & 1
-    return src_port, dest_port, sequence, acknowledgment, offset, flag_urg, flag_ack, flag_psh, flag_rst, flag_syn, flag_fin, data[offset:]
+**Network Packet Sniffer** is a command-line tool that captures and analyzes live network traffic in real time. It decodes packets layer by layer — from Ethernet frames all the way up to application-layer payloads — and prints everything in clean, human-readable format. A summary of all captured traffic is displayed at the end of each session.
 
-def udp_segment(data):
-    """Unpack UDP Segment (Layer 4)."""
-    src_port, dest_port, size = struct.unpack('! H H 2x H', data[:8])
-    return src_port, dest_port, size, data[8:]
+This project was built from scratch using **Python** and **Scapy**, with no third-party GUI dependencies.
 
-def format_multi_line(prefix, string, size=80):
-    """Format and wrap raw byte payloads into multi-line strings."""
-    size -= len(prefix)
-    if isinstance(string, bytes):
-        string = ''.join(r'\x{:02x}'.format(byte) for byte in string)
-        if size % 2:
-            size -= 1
-    return '\n'.join([prefix + line for line in textwrap.wrap(string, size)])
+---
 
-def main():
-    # Cross-platform raw socket binding (Linux AF_PACKET vs Windows AF_INET)
-    try:
-        conn = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
-        is_linux = True
-    except (AttributeError, OSError):
-        conn = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
-        conn.bind((socket.gethostbyname(socket.gethostname()), 0))
-        conn.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
-        conn.ioctl(socket.SIO_RCVALL, socket.RCVALL_ON)
-        is_linux = False
+## ✨ Features
 
-    print("[*] Sniffer engine active. Capturing raw traffic... (Press Ctrl+C to terminate)\n")
+| Feature | Description |
+|---|---|
+| 📦 **Layer-by-Layer Decoding** | Parses Ethernet → IP → TCP / UDP / ICMP in sequence |
+| 🔎 **Service Detection** | Identifies 12 common services by port (HTTP, HTTPS, SSH, DNS, RDP, etc.) |
+| 🏳️ **TCP Flag Analysis** | Detects SYN, ACK, FIN, RST, PSH flags for connection state tracking |
+| 📄 **Payload Preview** | Shows first 120 characters of UTF-8 application data per packet |
+| 📊 **Capture Summary** | Prints protocol breakdown totals at end of every session |
+| ⚙️ **CLI Arguments** | `--count` and `--iface` flags for flexible capture control |
+| 🛑 **Graceful Exit** | Handles `Ctrl+C` and permission errors cleanly with informative messages |
+| 🕒 **Timestamps** | Millisecond-precision timestamps on every captured packet |
 
-    try:
-        while True:
-            raw_data, _ = conn.recvfrom(65536)
+---
 
-            # Process Ethernet Frame on Linux/Unix systems
-            if is_linux:
-                dest_mac, src_mac, eth_proto, data = ethernet_frame(raw_data)
-                print('=' * 80)
-                print("[+] ETHERNET FRAME")
-                print(f"    ├── Destination MAC : {dest_mac}")
-                print(f"    ├── Source MAC      : {src_mac}")
-                print(f"    └── Protocol        : {eth_proto}")
-            else:
-                data = raw_data
-                eth_proto = 8  # Default IPv4 handling for Windows raw sockets
+## 🧱 Protocol Support
 
-            # IPv4 Protocol Handling
-            if eth_proto == 8:
-                version, header_length, ttl, proto, src, target, payload = ipv4_packet(data)
-                print("\n    [+] IPv4 PACKET")
-                print(f"        ├── Version     : {version}")
-                print(f"        ├── Header Len  : {header_length} Bytes")
-                print(f"        ├── TTL         : {ttl}")
-                print(f"        ├── Protocol    : {proto}")
-                print(f"        ├── Source IP   : {src}")
-                print(f"        └── Target IP   : {target}")
+```
+┌─────────────────────────────────────────────┐
+│              Application Layer               │  HTTP · HTTPS · SSH · FTP · DNS
+│                                              │  SMTP · MySQL · RDP · and more
+├─────────────────────────────────────────────┤
+│               Transport Layer                │  TCP (with flag decoding) · UDP
+├─────────────────────────────────────────────┤
+│                Network Layer                 │  IPv4 (src, dst, TTL, length)
+├─────────────────────────────────────────────┤
+│                 Data Link                    │  Ethernet (MAC addresses)
+└─────────────────────────────────────────────┘
+```
 
-                # ICMP (Protocol 1)
-                if proto == 1:
-                    icmp_type, code, checksum, icmp_payload = icmp_packet(payload)
-                    print("\n        [+] ICMP PACKET")
-                    print(f"            ├── Type     : {icmp_type}")
-                    print(f"            ├── Code     : {code}")
-                    print(f"            └── Checksum : {checksum}")
-                    if icmp_payload:
-                        print("\n        [+] PAYLOAD DATA:")
-                        print(format_multi_line("            ", icmp_payload))
+---
 
-                # TCP (Protocol 6)
-                elif proto == 6:
-                    src_port, dest_port, sequence, ack, offset, urg, flags_ack, psh, rst, syn, fin, tcp_payload = tcp_segment(payload)
-                    print("\n        [+] TCP SEGMENT")
-                    print(f"            ├── Source Port : {src_port}")
-                    print(f"            ├── Dest Port   : {dest_port}")
-                    print(f"            ├── Sequence    : {sequence}")
-                    print(f"            ├── Ack         : {ack}")
-                    print(f"            └── Flags       : URG={urg}, ACK={flags_ack}, PSH={psh}, RST={rst}, SYN={syn}, FIN={fin}")
-                    if tcp_payload:
-                        print("\n        [+] PAYLOAD DATA:")
-                        print(format_multi_line("            ", tcp_payload))
+## 🗂️ Project Structure
 
-                # UDP (Protocol 17)
-                elif proto == 17:
-                    src_port, dest_port, length, udp_payload = udp_segment(payload)
-                    print("\n        [+] UDP SEGMENT")
-                    print(f"            ├── Source Port : {src_port}")
-                    print(f"            ├── Dest Port   : {dest_port}")
-                    print(f"            └── Length      : {length}")
-                    if udp_payload:
-                        print("\n        [+] PAYLOAD DATA:")
-                        print(format_multi_line("            ", udp_payload))
+```
+network-sniffer/
+├── scapy_sniffer.py     ← Main sniffer script (all logic)
+└── README.md            ← This file
+```
 
-                # Other Protocols
-                else:
-                    if payload:
-                        print("\n        [+] RAW PAYLOAD:")
-                        print(format_multi_line("            ", payload))
+---
 
-    except KeyboardInterrupt:
-        print("\n[*] Shutting down sniffer gracefully...")
-        if not is_linux:
-            conn.ioctl(socket.SIO_RCVALL, socket.RCVALL_OFF)
+## ⚙️ Prerequisites
 
-if __name__ == '__main__':
-    main()
+| Requirement | Version | Notes |
+|---|---|---|
+| Python | 3.7 or higher | [python.org](https://www.python.org/downloads/) |
+| Scapy | 2.5 or higher | Installed via pip |
+| **Windows** — Npcap | Latest | [npcap.com](https://npcap.com/) — required for raw socket access |
+| **Linux/macOS** — Root | — | Run with `sudo` for capture permissions |
+
+---
+
+## 🚀 Installation & Setup
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/CodeAlpha_ProjectName.git
+cd CodeAlpha_ProjectName
+```
+
+### 2. Install Scapy
+
+```bash
+pip install scapy
+```
+
+### 3. Windows Only — Install Npcap
+
+Download and install from **[https://npcap.com/](https://npcap.com/)**
+
+> ✅ Check **"Install Npcap in WinPcap API-compatible Mode"** during installation.
+
+---
+
+## ▶️ Usage
+
+### Basic Capture (20 packets — default)
+```bash
+python scapy_sniffer.py
+```
+
+### Capture a Custom Number of Packets
+```bash
+python scapy_sniffer.py --count 50
+```
+
+### Capture on a Specific Network Interface
+```bash
+python scapy_sniffer.py --iface eth0          # Linux
+python scapy_sniffer.py --iface "Wi-Fi"       # Windows
+```
+
+### Capture Unlimited Packets (until Ctrl+C)
+```bash
+python scapy_sniffer.py --count 0
+```
+
+### Short Flags
+```bash
+python scapy_sniffer.py -c 30 -i eth0
+```
+
+### Windows — Run as Administrator
+```
+Right-click Command Prompt → Run as Administrator → python scapy_sniffer.py
+```
+
+### Linux/macOS — Run with sudo
+```bash
+sudo python scapy_sniffer.py --count 30
+```
+
+---
+
+## 📋 Sample Output
+
+```
+Scapy Network Sniffer
+Started at: 2024-11-15 14:32:07
+Capturing: 20 packets
+
+============================================================
+PACKET #1  [14:32:07.412]
+============================================================
+Ethernet:  Src=a4:c3:f0:12:34:56  Dst=ff:ff:ff:ff:ff:ff
+IP:        Src=192.168.1.105  Dst=142.250.194.46  TTL=64  Proto=6  Len=52
+TCP:       54321 -> 443  Seq=1928374650  Ack=0
+Flags:     SYN
+Service:   HTTPS
+
+============================================================
+PACKET #2  [14:32:07.538]
+============================================================
+Ethernet:  Src=a4:c3:f0:12:34:56  Dst=00:1a:2b:3c:4d:5e
+IP:        Src=192.168.1.105  Dst=8.8.8.8  TTL=64  Proto=17  Len=73
+UDP:       52412 -> 53  Length=53
+Service:   DNS
+
+============================================================
+PACKET #3  [14:32:07.621]
+============================================================
+IP:        Src=192.168.1.1  Dst=192.168.1.105  TTL=128  Proto=1  Len=60
+ICMP:      Echo Reply  Code=0
+
+============================================================
+CAPTURE SUMMARY
+============================================================
+Total packets : 20
+TCP           : 14
+UDP           : 4
+ICMP          : 1
+Other         : 1
+============================================================
+```
+
+---
+
+## 🔧 Command-Line Reference
+
+| Argument | Short | Default | Description |
+|---|---|---|---|
+| `--count` | `-c` | `20` | Number of packets to capture (`0` = unlimited) |
+| `--iface` | `-i` | System default | Network interface to capture on |
+
+---
+
+## 🧠 How It Works
+
+```
+Network Traffic
+      │
+      ▼
+┌─────────────┐
+│  Scapy sniff│  ← Captures raw packets from NIC using Npcap / libpcap
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────┐
+│  handle_packet()│  ← Called for every captured packet
+└──────┬──────────┘
+       │
+       ├──► Ethernet Layer  →  MAC addresses
+       │
+       ├──► IP Layer        →  Source/Destination IP, TTL, Protocol
+       │
+       ├──► TCP Layer       →  Ports, Flags (SYN/ACK/FIN/RST/PSH)
+       │       └──► identify_service_by_port()  →  Service name
+       │
+       ├──► UDP Layer       →  Ports, Length
+       │
+       ├──► ICMP Layer      →  Type (Echo Request/Reply/Unreachable)
+       │
+       └──► Raw Payload     →  UTF-8 preview (first 120 chars)
+              │
+              ▼
+       print_summary()  ←  Protocol totals after capture ends
+```
+
+---
+
+## 🔒 Security & Ethics Notice
+
+> **This tool is built for educational purposes and authorized network analysis only.**
+
+- ✅ Use only on networks you own or have explicit written permission to test
+- ✅ Ideal for learning network protocols in a home lab or classroom
+- ❌ Do NOT use on public networks, corporate networks without authorization, or to intercept others' communications
+- ❌ Unauthorized packet sniffing is illegal in most jurisdictions
+
+*The author is not responsible for misuse of this tool.*
+
+---
+
+## 🛠️ Troubleshooting
+
+| Issue | Cause | Fix |
+|---|---|---|
+| `PermissionError` | Not running as admin/root | Windows: Run as Administrator. Linux: Use `sudo` |
+| `Npcap not found` | Npcap not installed | Download from [npcap.com](https://npcap.com/) |
+| `ModuleNotFoundError: scapy` | Scapy not installed | Run `pip install scapy` |
+| No packets captured | Wrong interface | Run `python -c "from scapy.all import get_if_list; print(get_if_list())"` to list interfaces |
+| Only non-IP packets | Loopback interface selected | Switch to your Wi-Fi or Ethernet interface |
+
+---
+
+## 🚀 Possible Improvements
+
+- [ ] BPF filter support (`--filter "tcp port 80"`)
+- [ ] Export captures to `.pcap` files (Wireshark-compatible)
+- [ ] IPv6 packet parsing
+- [ ] DNS query/response decoding
+- [ ] HTTP request/response parsing
+- [ ] Colored terminal output
+- [ ] Real-time statistics dashboard
+
+---
+
+## 📚 References & Learning Resources
+
+- [Scapy Official Documentation](https://scapy.readthedocs.io/)
+- [Npcap — Windows Packet Capture](https://npcap.com/)
+- [RFC 791 — Internet Protocol](https://www.rfc-editor.org/rfc/rfc791)
+- [RFC 793 — Transmission Control Protocol](https://www.rfc-editor.org/rfc/rfc793)
+- [Wireshark — Network Protocol Analyzer](https://www.wireshark.org/)
+
+---
+
+## 👨‍💻 Author
+
+**Ajith**
+CSE Student — J.N.N. Institute of Engineering (JNNCE)
+CodeAlpha Cybersecurity Intern
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://linkedin.com/in/mosess26)
+[![GitHub](https://img.shields.io/badge/GitHub-Follow-black?style=flat&logo=github)](https://github.com/YOUR_USERNAME)
+
+---
+
+## 📝 Internship Details
+
+| Field | Detail |
+|---|---|
+| Organization | CodeAlpha |
+| Program | Cybersecurity Internship |
+| Task | Task 1 — Basic Network Sniffer |
+| Language | Python 3 |
+| Library | Scapy |
+| Repository | `CodeAlpha_ProjectName` |
+
+---
+
+<div align="center">
+
+*Built with 🔒 for the CodeAlpha Cybersecurity Internship*
+
+</div>
